@@ -1,26 +1,186 @@
 @import "tailwindcss";
 
+@theme {
+  --color-void: #0a0a14;
+  --color-void-2: #0e0e1c;
+  --color-ink: #f4f2ff;
+  --color-muted: #8f8caa;
+  --color-faint: #5d5a78;
+
+  --color-primary: #a99bff;
+  --color-primary-dim: #6f63c4;
+  --color-gold: #e8c58a;
+  --color-aqua: #6fd6e0;
+
+  --color-fire: #ff8a6b;
+  --color-earth: #8fd69c;
+  --color-air: #9fc7ff;
+  --color-water: #6fd6e0;
+
+  --font-serif: var(--font-bodoni), "Bodoni Moda", Georgia, serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 12px;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Only html carries the base colour. If body painted a background too, the
+   negative-z-index nebula and starfield would sit behind it and never show. */
+html {
+  background: var(--color-void);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Zodiac signs default to emoji presentation; we want the typographic form. */
+  font-variant-emoji: text;
+}
+
+/* The nebula: a fixed, non-interactive wash behind everything. */
+.nebula {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      60rem 42rem at 50% -14%,
+      rgba(120, 90, 220, 0.22),
+      transparent 62%
+    ),
+    radial-gradient(
+      40rem 34rem at 88% 12%,
+      rgba(90, 170, 210, 0.1),
+      transparent 60%
+    ),
+    radial-gradient(
+      46rem 40rem at 6% 74%,
+      rgba(150, 100, 200, 0.09),
+      transparent 62%
+    ),
+    var(--color-void);
+}
+
+/* Starfield rendered as layers of tiny radial gradients, slowly drifting. */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(1px 1px at 14% 22%, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1px 1px at 62% 8%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 84% 46%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 32% 68%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 8% 88%, rgba(255, 255, 255, 0.75), transparent),
+    radial-gradient(1px 1px at 72% 82%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(
+      1.4px 1.4px at 46% 36%,
+      rgba(232, 197, 138, 0.7),
+      transparent
+    ),
+    radial-gradient(
+      1.4px 1.4px at 92% 74%,
+      rgba(169, 155, 255, 0.6),
+      transparent
+    );
+  background-size:
+    420px 420px,
+    380px 380px,
+    500px 500px,
+    460px 460px,
+    540px 540px,
+    400px 400px,
+    620px 620px,
+    580px 580px;
+  animation: drift 240s linear infinite;
+}
+
+@keyframes drift {
+  to {
+    background-position:
+      420px 420px,
+      -380px 380px,
+      500px -500px,
+      -460px -460px,
+      540px 540px,
+      -400px 400px,
+      620px -620px,
+      -580px 580px;
+  }
+}
+
+@utility glass {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+@utility hairline {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@utility smallcaps {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Depth via inner glow rather than drop shadows. */
+@utility lumen {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+@utility glow-primary {
+  box-shadow:
+    0 0 24px rgba(169, 155, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starfield {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
