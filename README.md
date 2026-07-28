@@ -120,7 +120,18 @@ a deterministic local reader. The last one needs no credentials at all, so
 
 `GET /api/providers` reports live pool health — which keys are available,
 which are cooling off and for how long, and their success/failure counts, all
-masked.
+masked. In production it is sealed behind `ASTRAL_DIAGNOSTICS_TOKEN`:
+
+```bash
+curl -H "Authorization: Bearer $ASTRAL_DIAGNOSTICS_TOKEN" https://…/api/providers
+```
+
+Masked is not the same as harmless. The payload still says how many keys back
+the app, four real characters of each, how close each is to exhaustion, and
+what the upstream last complained about — a usable map of how to drain the
+pool. With no token set the endpoint answers 404 rather than 401, since an
+endpoint that refuses you has still told you it exists. It stays open on
+localhost.
 
 ### Why failover happens before streaming starts
 
@@ -131,6 +142,38 @@ try another key. So the pool pulls from the stream until either real output
 arrives (commit) or an error part does (fail over), then replays the consumed
 chunks so nothing is lost at the seam. `npm run verify:failover` asserts
 exactly that, against a local stand-in for the Groq API.
+
+## Security
+
+Response headers are set in `next.config.ts` and apply to every route: CSP,
+HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy`, the two Cross-Origin-* policies, and no `X-Powered-By`.
+
+The CSP keeps `'unsafe-inline'` in `script-src`, deliberately. Every page here
+is statically prerendered and Next.js embeds the RSC payload as inline
+`<script>` tags — six per page — which a nonce cannot cover, because nonces
+are minted per request and adopting one forces all nine pages to dynamic
+rendering. That trade buys nothing on an app that is client-rendered anyway,
+so the policy spends its strength elsewhere: `connect-src 'self'` blocks
+exfiltration, `script-src 'self'` still refuses foreign script origins, and
+`object-src` / `base-uri` / `form-action` / `frame-ancestors` close the usual
+injection and clickjacking routes. There is no HTML-injection sink in this
+codebase — no `dangerouslySetInnerHTML`, no `innerHTML`, no `eval` — so
+React's escaping is the primary XSS defence and the CSP is the backstop.
+
+`/api/chat` is unauthenticated and spends a finite, paid-for resource, so it
+validates rather than trusts. The body is capped before it is read, parsed
+under a schema, and then **rebuilt from scratch**: text parts only, `user` and
+`assistant` roles only, each message and the whole conversation bounded.
+Nothing reaches the model that did not pass through that. A forged `system`
+role is rejected outright, and the chart block is framed to the model as data
+rather than instruction, since it arrives from the browser.
+
+Every API route is rate-limited per IP in its own namespace — 20 chat requests
+per 5 minutes, 60 geocode lookups per minute, 30 diagnostics reads per minute.
+The limiter is in-memory and therefore per warm instance, the same best-effort
+trade the key pool makes; it exists to stop one client draining the Groq quota,
+not to absorb a distributed flood. That belongs at the edge.
 
 ## What this is and isn't
 
