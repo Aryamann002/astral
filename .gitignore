@@ -30,9 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — every real one stays out; the template is the sole exception
+# env files — the app needs none, but never commit one if you add it
 .env*
-!.env.example
 
 # vercel
 .vercel

@@ -9,14 +9,9 @@
     "lint": "eslint",
     "verify": "tsx scripts/verify-engine.ts",
     "verify:app": "tsx scripts/verify-app.ts",
-    "check": "tsc --noEmit && npm run verify && npm run verify:app && npm run verify:keys && npm run verify:failover",
-    "verify:keys": "tsx scripts/verify-keys.ts",
-    "verify:failover": "tsx scripts/verify-failover.mts"
+    "check": "tsc --noEmit && npm run verify && npm run verify:app"
   },
   "dependencies": {
-    "@ai-sdk/groq": "^4.0.13",
-    "@ai-sdk/react": "^4.0.40",
-    "ai": "^7.0.37",
     "astronomy-engine": "^2.1.19",
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",
@@ -26,7 +21,6 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

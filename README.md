@@ -23,7 +23,7 @@ npm run check    # typecheck + both verification suites
 | **Today** | A daily reading derived from live transits to the natal chart. |
 | **Transits** | Forward scan for aspect perfections with orb windows and exactness dates, grouped by month. |
 | **Match** | Synastry: inter-chart aspects, category breakdown, strongest contacts and friction points. |
-| **Ask** | An astrologer with your full chart as context. |
+| **Ask** | A deterministic reading computed on your device, plus a ready-made prompt you can hand to ChatGPT, Claude, Gemini or anything else. No API key, no account, no server. |
 
 ## The astronomy
 
@@ -63,9 +63,10 @@ across historical DST rules, chart assembly, interpretation coverage, daily
 readings, 90- and 365-day transit forecasts, synastry, and the polar-latitude
 and unknown-birth-time edge cases.
 
-`npm run verify:keys` and `npm run verify:failover` cover the Groq key pool —
-env parsing, round-robin fairness, cooldown and backoff, and end-to-end
-failover against a local stand-in for the Groq API.
+It also covers the prompt handoff: topic scoping, that a scoped prompt is
+smaller than a full one but still carries the big three, that signs are spelled
+out rather than drawn as glyphs, and that an oversized prompt falls back to a
+bare handoff URL instead of being silently truncated into one.
 
 ## Determinism
 
@@ -83,65 +84,50 @@ of drop shadows. Stitch project `15322030067189419646`.
 
 ## Privacy
 
-Birth data lives in `localStorage` and charts are computed in the browser. It
-leaves the device only if you use **Ask**, which sends a text summary of the
-chart to the configured model provider.
+Birth data lives in `localStorage` and charts are computed in the browser.
+Nothing is sent to a server, because there is no server to send it to — no
+accounts, no analytics, no database.
 
-## Configuration — the Groq key pool
+**Ask** is the one place chart data can leave the device, and only because you
+move it: the reading is computed locally, and the prompt it builds sits on your
+clipboard until you paste it. The panel shows the exact text first.
 
-Copy `.env.example` to `.env.local`. **Astral pools multiple Groq API keys**
-and uses them round-robin, so several free-tier keys behave like one larger
-quota. Supply them in whichever form is convenient — all three are read and
-duplicates collapse:
+The app's only outbound request is place search during onboarding, which
+proxies Open-Meteo through `/api/geocode`. That sends a place name — not a
+birth date, not a time, not a chart.
 
-```bash
-GROQ_API_KEYS=gsk_first...,gsk_second...,gsk_third...   # list
-GROQ_API_KEY=gsk_only...                                # single
-GROQ_API_KEY_1=...  GROQ_API_KEY_2=...                  # numbered
-```
+## Ask — bring your own model
 
-What the pool does:
+Astral needs no API keys, because it never calls a model. Two things happen on
+the Ask screen, both in the browser:
 
-- **Spreads load** round-robin, so no single key absorbs the traffic.
-- **Benches a throttled key** on a 429, for exactly as long as Groq's
-  `retry-after` header or its "try again in 1.5s" message asks — then fails
-  over to the next key mid-request, before a single token has been sent to the
-  browser.
-- **Disables an invalid key** on a 401/403 rather than retrying it forever.
-- **Backs off further** each time the same key fails consecutively.
-- **Steps over a dead model** without blaming the key: a decommissioned model
-  returns a 4xx that has nothing to do with your credentials, so the pool moves
-  down `GROQ_MODEL` → built-in candidates instead of benching a good key.
-- **Never leaks a key** — logs, errors and diagnostics show `gsk_…a1b2` only.
+**A local reading.** `localAstrologer` matches your question against a topic
+table, pulls the placements that govern it out of the chart, and quotes them
+back. Deterministic, instant, always available — and narrow by construction: it
+quotes, it does not compose.
 
-Provider order is Groq → Vercel AI Gateway (if `AI_GATEWAY_API_KEY` is set) →
-a deterministic local reader. The last one needs no credentials at all, so
-`/api/chat` can never fail outright.
+**A prompt you can take anywhere.** The same topic table decides what a model
+would need to answer properly, and `buildPromptPack` assembles it into a
+self-contained prompt — reading instructions, the relevant slice of the chart,
+and your question. Copy it, or use *Copy & open* to send it to ChatGPT, Claude,
+Gemini or Perplexity with the prompt already on your clipboard.
 
-`GET /api/providers` reports live pool health — which keys are available,
-which are cooling off and for how long, and their success/failure counts, all
-masked. In production it is sealed behind `ASTRAL_DIAGNOSTICS_TOKEN`:
+Two scopes. *Just this question* carries the topic's placements, your big three
+and chart ruler, and any body its aspects name — roughly 2,700 characters for
+something broad like love, less for something narrow like a Saturn return.
+*Full chart* carries everything, around 3,100. The prompt never cites a body it
+has not positioned: an aspect line like `Sun trine Neptune` drags Neptune's
+placement in with it, because otherwise the prompt is asking the model to
+reason about a degree it was never given.
 
-```bash
-curl -H "Authorization: Bearer $ASTRAL_DIAGNOSTICS_TOKEN" https://…/api/providers
-```
+Signs are spelled out rather than drawn: a model reads `9° Cancer 39'` more
+reliably than `9° ♋︎ 39'`, and the glyph costs nine characters once
+URL-encoded.
 
-Masked is not the same as harmless. The payload still says how many keys back
-the app, four real characters of each, how close each is to exhaustion, and
-what the upstream last complained about — a usable map of how to drain the
-pool. With no token set the endpoint answers 404 rather than 401, since an
-endpoint that refuses you has still told you it exists. It stays open on
-localhost.
-
-### Why failover happens before streaming starts
-
-`streamText` is lazy: it reports transport failures as an error *inside* the
-stream rather than by throwing. Returning that response directly would mean a
-rate limit only surfaced once the browser was already reading, far too late to
-try another key. So the pool pulls from the stream until either real output
-arrives (commit) or an error part does (fail over), then replays the consumed
-chunks so nothing is lost at the seam. `npm run verify:failover` asserts
-exactly that, against a local stand-in for the Groq API.
+ChatGPT, Claude and Perplexity accept a prefilled query string. Gemini has no
+supported prefill parameter, so it opens blank and you paste. Either way the
+prompt is copied before the tab opens, so a blocked prefill or an over-long URL
+costs nothing.
 
 ## Security
 
@@ -152,7 +138,7 @@ HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
 The CSP keeps `'unsafe-inline'` in `script-src`, deliberately. Every page here
 is statically prerendered and Next.js embeds the RSC payload as inline
 `<script>` tags — six per page — which a nonce cannot cover, because nonces
-are minted per request and adopting one forces all nine pages to dynamic
+are minted per request and adopting one forces every page to dynamic
 rendering. That trade buys nothing on an app that is client-rendered anyway,
 so the policy spends its strength elsewhere: `connect-src 'self'` blocks
 exfiltration, `script-src 'self'` still refuses foreign script origins, and
@@ -161,19 +147,18 @@ injection and clickjacking routes. There is no HTML-injection sink in this
 codebase — no `dangerouslySetInnerHTML`, no `innerHTML`, no `eval` — so
 React's escaping is the primary XSS defence and the CSP is the backstop.
 
-`/api/chat` is unauthenticated and spends a finite, paid-for resource, so it
-validates rather than trusts. The body is capped before it is read, parsed
-under a schema, and then **rebuilt from scratch**: text parts only, `user` and
-`assistant` roles only, each message and the whole conversation bounded.
-Nothing reaches the model that did not pass through that. A forged `system`
-role is rejected outright, and the chart block is framed to the model as data
-rather than instruction, since it arrives from the browser.
+The attack surface is mostly absent rather than defended. There are no API
+keys to steal, no model budget to drain, no accounts to compromise and no
+stored data to breach. One server route survives — `/api/geocode` — and it is
+a thin proxy over Open-Meteo carrying a place name.
 
-Every API route is rate-limited per IP in its own namespace — 20 chat requests
-per 5 minutes, 60 geocode lookups per minute, 30 diagnostics reads per minute.
-The limiter is in-memory and therefore per warm instance, the same best-effort
-trade the key pool makes; it exists to stop one client draining the Groq quota,
-not to absorb a distributed flood. That belongs at the edge.
+That route caps its query at 100 characters, strips control characters before
+they reach an outbound request line, and is rate-limited to 60 lookups per
+minute per IP so it cannot be used to hammer Open-Meteo from this app's
+address. Its responses are `private` so a shared cache never holds a record of
+where someone was about to say they were born. The limiter is in-memory and
+therefore per warm instance — best-effort by design, meant to stop one client
+being a nuisance, not to absorb a distributed flood. That belongs at the edge.
 
 ## What this is and isn't
 

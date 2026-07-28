@@ -2,14 +2,13 @@
  * Best-effort per-IP rate limiting.
  *
  * State is module-level, so a limit is per warm server instance rather than
- * global — the same trade the Groq key pool makes, and for the same reasons:
- * it needs no external store, costs nothing to run, and its failure mode is a
- * limit that turns out more generous than advertised when traffic is spread
- * across instances.
+ * global. That is deliberate: it needs no external store, costs nothing to
+ * run, and its failure mode is a limit that turns out more generous than
+ * advertised when traffic is spread across instances.
  *
- * The job here is to stop one client burning the shared Groq quota or
- * hammering the upstream geocoder. It is not a defence against a distributed
- * flood; that belongs at the edge, in the Vercel WAF.
+ * The job here is to stop one client hammering the upstream geocoder from this
+ * app's address. It is not a defence against a distributed flood; that belongs
+ * at the edge, in the Vercel WAF.
  */
 
 interface Window {

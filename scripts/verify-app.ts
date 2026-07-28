@@ -16,6 +16,7 @@ import {
 } from "../src/lib/astro/transits";
 import { computeSynastry } from "../src/lib/astro/synastry";
 import { localAstrologer } from "../src/lib/astro/localAstrologer";
+import { buildPromptPack, HANDOFFS } from "../src/lib/astro/promptPack";
 import { resolveBirthInstant } from "../src/lib/geo";
 import {
   chartHeadline,
@@ -295,6 +296,124 @@ for (const system of ["placidus", "wholeSign", "equal", "porphyry"] as const) {
   const c = buildChart({ ...chart.birth, houseSystem: system });
   ok(`${system} produces 12 cusps`, c.houses.cusps.length === 12);
 }
+
+console.log("\n— Prompt handoff —");
+const lovePrompt = buildPromptPack(chart, "what does my chart say about love?", "relevant");
+const fullPrompt = buildPromptPack(chart, "what does my chart say about love?", "full");
+
+ok("scoped prompt matched a topic", lovePrompt.topic?.label === "love");
+ok(
+  "scoped prompt is smaller than the full chart",
+  lovePrompt.chars < fullPrompt.chars,
+  `${lovePrompt.chars} vs ${fullPrompt.chars} chars`,
+);
+ok(
+  "scoped prompt keeps the big three",
+  ["sun", "moon", "asc"].every((id) =>
+    lovePrompt.included.includes(id as (typeof lovePrompt.included)[number]),
+  ),
+);
+ok(
+  "scoped prompt carries the topic's ruler",
+  lovePrompt.included.includes("venus"),
+);
+ok(
+  "full prompt carries every body",
+  fullPrompt.included.length > lovePrompt.included.length,
+  `${fullPrompt.included.length} points`,
+);
+ok(
+  "prompt contains the question",
+  lovePrompt.text.includes("what does my chart say about love?"),
+);
+ok(
+  "prompt states the data is ground truth",
+  lovePrompt.text.includes("ground truth"),
+);
+
+// A prompt that cites "Sun trine Neptune" without giving Neptune's position is
+// asking the model to reason about a placement it was never handed.
+const section = (text: string, from: string) => {
+  const start = text.indexOf(from);
+  if (start === -1) return "";
+  const rest = text.slice(start + from.length);
+  const end = rest.indexOf("\n\n");
+  return end === -1 ? rest : rest.slice(0, end);
+};
+// Longest first, so "Black Moon Lilith" is consumed before "Moon" matches it.
+const POINT_NAMES = [
+  "Black Moon Lilith",
+  "Part of Fortune",
+  "North Node",
+  "South Node",
+  "Ascendant",
+  "Descendant",
+  "Midheaven",
+  "Imum Coeli",
+  "Mercury",
+  "Venus",
+  "Mars",
+  "Jupiter",
+  "Saturn",
+  "Uranus",
+  "Neptune",
+  "Pluto",
+  "Moon",
+  "Sun",
+];
+let unconsumed = section(lovePrompt.text, "Aspects:\n");
+const namedInAspects: string[] = [];
+for (const name of POINT_NAMES) {
+  if (unconsumed.includes(name)) {
+    namedInAspects.push(name);
+    unconsumed = unconsumed.split(name).join("");
+  }
+}
+const listedBlock =
+  section(lovePrompt.text, "Angles:\n") +
+  "\n" +
+  section(lovePrompt.text, "Placements:\n");
+const unlisted = namedInAspects.filter((name) => !listedBlock.includes(name));
+ok(
+  "every body named in an aspect has its placement listed",
+  unlisted.length === 0,
+  unlisted.length ? `missing ${unlisted.join(", ")}` : `${namedInAspects.length} bodies`,
+);
+
+// Signs must be spelled out: a model reads "Cancer" more reliably than the
+// glyph, and the glyph costs nine characters once URL-encoded.
+const glyphs = SIGNS.map((s) => s.glyph);
+ok(
+  "prompt is free of sign glyphs",
+  !glyphs.some((glyph) => fullPrompt.text.includes(glyph)),
+);
+ok("prompt names signs in words", fullPrompt.text.includes("Cancer"));
+
+const unknownPrompt = buildPromptPack(noTime, "tell me about my career", "full");
+ok(
+  "prompt warns when the birth time is unknown",
+  unknownPrompt.text.includes("birth time is unknown"),
+);
+
+const vaguePrompt = buildPromptPack(chart, "hello there", "relevant");
+ok("unmatched question still builds", vaguePrompt.topic === null);
+ok(
+  "unmatched question falls back to the core",
+  vaguePrompt.included.includes("sun") && vaguePrompt.included.includes("mc"),
+);
+
+const chatgpt = HANDOFFS.find((h) => h.id === "chatgpt")!;
+const gemini = HANDOFFS.find((h) => h.id === "gemini")!;
+ok(
+  "short prompts prefill the target",
+  chatgpt.href("read my chart").includes("read%20my%20chart"),
+);
+ok(
+  "oversized prompts fall back to the bare site",
+  !chatgpt.href("x".repeat(9000)).includes("?q="),
+  "clipboard carries it instead",
+);
+ok("gemini is declared paste-only", !gemini.prefills);
 
 console.log(
   `\n${failures === 0 ? "✓ all checks passed" : `✗ ${failures} check(s) failed`}\n`,
